@@ -1,0 +1,139 @@
+在使用 Git 的过程中有的时候迫不得已，会出现提交了几次之后需要删除中间的某一次 commit，这个时候我们可以使用 git rebase -i 来解决这个问题。
+
+首先我们来，制造案发现场。假定提交记录如下：
+
+> git log --oneline
+ace1fbc 2nd commit
+5dc2898 dirty update
+8c6388c 1st commit
+其中 dirty update 这个 commit 属于需要去除的提交。我们先来模拟这个情况。
+
+#
+# 1. 初始化一个 git 仓库
+#
+git init git-test
+cd git-test
+
+#
+# 2.1 1st commit
+#
+echo hello > README.md
+git add README.md
+git commit -m "1st commit"
+
+#
+# 2.2 dirty update
+#
+echo 'hello\ndirty' > README.md
+git add README.md
+git commit -m "dirty update"
+
+#
+# diff
+# --- a/README.md
+# +++ b/README.md
+# @@ -1 +1,2 @@
+#  hello
+# +dirty
+#
+
+#
+# 2.3 2nd commit
+#
+echo 'hello\nworld' > README.md
+git add README.md
+git commit -m "2nd commit"
+
+#
+# diff
+# --- a/README.md
+# +++ b/README.md
+# @@ -1,2 +1,2 @@
+#  hello
+# -dirty
+# +world
+#
+此时的 commit 记录：
+
+> git log --oneline
+
+3248fbf (HEAD -> master) 2nd commit
+595724c dirty update
+87c4fae 1st commit
+如果我们想清除 dirty update 这个 commit，则可以找到这个 commit 的上一个 commit 的 commit id，即 87c4fae，然后进入如下操作：
+
+#
+# 3. 进入 rebase
+#
+git rebase -i 87c4fae
+运行该命令之后会进入交互式的修改页面：
+
+pick 595724c dirty update
+pick 3248fbf 2nd commit
+
+# Rebase 87c4fae..3248fbf onto 87c4fae (2 commands)
+#
+# Commands:
+# p, pick = use commit
+# r, reword = use commit, but edit the commit message
+# e, edit = use commit, but stop for amending
+# s, squash = use commit, but meld into previous commit
+# f, fixup = like "squash", but discard this commit's log message
+# x, exec = run command (the rest of the line) using shell
+# d, drop = remove commit
+#
+# These lines can be re-ordered; they are executed from top to bottom.
+#
+# If you remove a line here THAT COMMIT WILL BE LOST.
+#
+# However, if you remove everything, the rebase will be aborted.
+#
+# Note that empty commits are commented out
+将 pick 595724c dirty update 其中的 pick 修改为 drop，然后 :wq 保存退出即可结束 rebase 的交互式编辑界面。
+
+不过保存退出后会发现，rebase 工具提示你：
+
+Auto-merging README.md
+CONFLICT (content): Merge conflict in README.md
+error: could not apply 3248fbf... 2nd commit
+
+Resolve all conflicts manually, mark them as resolved with
+"git add/rm <conflicted_files>", then run "git rebase --continue".
+You can instead skip this commit: run "git rebase --skip".
+To abort and get back to the state before "git rebase", run "git rebase --abort".
+
+Could not apply 3248fbf... 2nd commit
+没有自动 rebase 成功，出现了 README.md 文件出现了冲突。我们看看冲突文件的情况：
+
+> cat README.md
+
+hello
+<<<<<<< HEAD
+=======
+world
+>>>>>>> 3248fbf... 2nd commit
+此时修复冲突比较简单，将 HEAD 版本去掉保留 3248fbf （2nd commit）的内容，即可达到去掉 dirty update 的目的。
+
+#
+# 4.1 将文件改为正确的内容
+#
+hello
+world
+之后，继续：
+
+#
+# 4.2 将冲突标为已解决
+#
+git add README.md
+
+#
+# 4.3 继续执行 rebase
+#
+git rebase --continue
+即可完成 rebase 将 dirty udpate 去除。最后查看一下修改完的日志记录：
+
+> git log --oneline
+
+* 5293887 (HEAD -> master) 2nd commit
+* 87c4fae 1st commit
+以上是有冲突的情况，如果没有冲突的话（例如，dirty commit 中修改的文件与 2nd commit 中的修改无关系），那么在将 pick 改为 drop 并保存之后就可以完成 rebase 了。
